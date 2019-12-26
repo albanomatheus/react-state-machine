@@ -4,16 +4,26 @@ import React, { useState } from "react";
 import { Machine, assign } from "xstate";
 import "./App.css";
 
-const foo = {
-  email: "foo",
-  password: "foo123"
+const user = {
+  email: "matheus",
+  password: "matheus123"
 };
 
-function userLogin(user) {
+let stateHistory = [];
+let statesChecked = [];
+
+function saveContext(state, ctx) {
+  if (statesChecked.find(checkPoints => checkPoints === state)) {
+    stateHistory.push({ state: state, ...ctx });
+  }
+  console.log("Historico do contexto: ", stateHistory);
+}
+
+function userLogin(data) {
   return new Promise((resolve, reject) => {
     setTimeout(() => {
-      user.email === foo.email && user.password === foo.password
-        ? resolve(`Welcome ${user.username}`)
+      data.email === user.email && data.password === user.password
+        ? resolve(`Welcome ${data.email}`)
         : reject("Username or password invalid!");
     }, 2000);
   });
@@ -22,19 +32,23 @@ function userLogin(user) {
 const stateMachine = Machine({
   initial: "initial",
   context: {
-    email: "",
-    password: "",
-    msg: ""
+    msg: "",
+    debbugVariables: {
+      email: "",
+      password: ""
+    }
   },
   states: {
     initial: {
+      entry: (ctx, event) => saveContext("initial", ctx.debbugVariables),
       on: {
         SUBMIT: [
           {
             target: "loading",
-            cond: (ctx, event) => {
-              return event.data.email !== "" && event.data.password !== "";
-            }
+            cond: (ctx, event) => event.data.email !== "" && event.data.password !== "",
+            actions: assign({
+              debbugVariables: (ctx, event) => event.data
+            })
           },
           {
             target: "error",
@@ -46,30 +60,41 @@ const stateMachine = Machine({
       }
     },
     loading: {
+      entry: (ctx, event) => saveContext("loading", ctx.debbugVariables),
       invoke: {
         id: "login",
         src: (ctx, event) => userLogin({ ...event.data }),
         onDone: {
           target: "logged",
-          actions: assign({ msg: (ctx, event) => event.data })
+          actions: assign({
+            msg: (ctx, event) => event.data
+          })
         },
         onError: {
           target: "error",
-          actions: assign({ msg: (ctx, event) => event.data })
+          actions: assign({
+            msg: (ctx, event) => event.data
+          })
         }
       }
     },
     error: {
+      entry: (ctx, event) => saveContext("error", ctx.debbugVariables),
       on: {
         SUBMIT: {
           target: "loading",
           cond: (ctx, event) => {
             return event.data.email !== "" && event.data.password !== "";
-          }
+          },
+          actions: assign({
+            msg: (ctx, event) => event.data,
+            debbugVariables: (ctx, event) => event.data
+          })
         }
       }
     },
     logged: {
+      entry: (ctx, event) => saveContext("logged", ctx.debbugVariables),
       type: "final"
     }
   }
@@ -116,11 +141,52 @@ const Form = props => {
 };
 
 const ErrorMessage = props => {
-  return props.machine.matches("error") ? (
+  return (
     <div className="alert error">
       {props.machine.context.msg ? props.machine.context.msg : "Oh no! No error message."}
     </div>
-  ) : null;
+  );
+};
+
+const MicroFlowState = props => {
+  return (
+    <div
+      className={`state btn ${props.machine.value === props.name ? "btn-danger" : "btn-primary"}`}
+    >
+      <p>{props.name}</p>
+      <input type="checkbox" onChange={e => props.onClick(e, props.name)} />
+    </div>
+  );
+};
+
+const MicroFlow = props => {
+  const setCheckPoint = (e, stateName) => {
+    if (e.target.checked) {
+      statesChecked.push(stateName);
+    } else {
+      statesChecked = statesChecked.filter(checkPoints => {
+        return checkPoints !== stateName;
+      });
+    }
+  };
+
+  const states = Object.keys(stateMachine.states).map(state => {
+    return (
+      <MicroFlowState name={state} key={state} machine={props.machine} onClick={setCheckPoint} />
+    );
+  });
+
+  return <div style={{ textAlign: "center" }}>{states}</div>;
+};
+
+const StateHistory = props => {
+  return (
+    <div>
+      {stateHistory.map((log, index) => (
+        <div key={index}>{JSON.stringify(log)}</div>
+      ))}
+    </div>
+  );
 };
 
 const App = () => {
@@ -129,35 +195,13 @@ const App = () => {
   return (
     <div style={{ margin: "130px auto", width: "800px" }}>
       <MicroFlow machine={machine} />
-      <ErrorMessage machine={machine} />
-      <Form send={send} />
+      {machine.matches("error") || machine.matches("logged") ? (
+        <ErrorMessage machine={machine} />
+      ) : null}
+      {!machine.matches("logged") ? <Form send={send} /> : null}
+      <StateHistory />
     </div>
   );
-};
-
-const MicroFlowState = props => {
-  return (
-    <button
-      className={`state btn ${props.machine.value === props.name ? "btn-danger" : "btn-primary"}`}
-      onClick={() => props.onClick(props.machine)}
-    >
-      {props.name}
-    </button>
-  );
-};
-
-const MicroFlow = props => {
-  const showContext = state => {
-    console.log(state.context);
-  };
-
-  const states = Object.keys(stateMachine.states).map(state => {
-    return (
-      <MicroFlowState name={state} key={state} machine={props.machine} onClick={showContext} />
-    );
-  });
-
-  return <div style={{ textAlign: "center" }}>{states}</div>;
 };
 
 export default App;
