@@ -5,7 +5,7 @@ import { Machine, assign } from "xstate";
 import "./App.css";
 
 const user = {
-  email: "matheus",
+  email: "matheus@gmail.com",
   password: "matheus123"
 };
 
