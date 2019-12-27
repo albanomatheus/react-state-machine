@@ -1,22 +1,22 @@
 import { useMachine } from "@xstate/react";
 import "bootstrap/dist/css/bootstrap.min.css";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Machine, assign } from "xstate";
 import "./App.css";
 
 const user = {
-  email: "matheus@gmail.com",
+  email: "matheus",
   password: "matheus123"
 };
 
 let stateHistory = [];
-let statesChecked = [];
+let statesChecked = ["initial"];
 
 function saveContext(state, ctx) {
+  console.log(ctx);
   if (statesChecked.find(checkPoints => checkPoints === state)) {
     stateHistory.push({ state: state, ...ctx });
   }
-  console.log("Historico do contexto: ", stateHistory);
 }
 
 function userLogin(data) {
@@ -154,7 +154,11 @@ const MicroFlowState = props => {
       className={`state btn ${props.machine.value === props.name ? "btn-danger" : "btn-primary"}`}
     >
       <p>{props.name}</p>
-      <input type="checkbox" onChange={e => props.onClick(e, props.name)} />
+      <input
+        type="checkbox"
+        onChange={e => props.onClick(e, props.name)}
+        defaultChecked={statesChecked.find(name => name === props.name)}
+      />
     </div>
   );
 };
@@ -181,7 +185,7 @@ const MicroFlow = props => {
 
 const StateHistory = props => {
   return (
-    <div>
+    <div style={{ marginRight: "100px" }}>
       {stateHistory.map((log, index) => (
         <div key={index}>{JSON.stringify(log)}</div>
       ))}
