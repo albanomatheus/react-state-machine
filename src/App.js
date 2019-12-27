@@ -1,23 +1,13 @@
-import { useMachine } from "@xstate/react";
 import "bootstrap/dist/css/bootstrap.min.css";
 import React, { useState, useEffect } from "react";
 import { Machine, assign } from "xstate";
+import { useMachine } from "@xstate/react";
 import "./App.css";
 
 const user = {
   email: "matheus",
   password: "matheus123"
 };
-
-let stateHistory = [];
-let statesChecked = ["initial"];
-
-function saveContext(state, ctx) {
-  console.log(ctx);
-  if (statesChecked.find(checkPoints => checkPoints === state)) {
-    stateHistory.push({ state: state, ...ctx });
-  }
-}
 
 function userLogin(data) {
   return new Promise((resolve, reject) => {
@@ -28,77 +18,6 @@ function userLogin(data) {
     }, 2000);
   });
 }
-
-const stateMachine = Machine({
-  initial: "initial",
-  context: {
-    msg: "",
-    debbugVariables: {
-      email: "",
-      password: ""
-    }
-  },
-  states: {
-    initial: {
-      entry: (ctx, event) => saveContext("initial", ctx.debbugVariables),
-      on: {
-        SUBMIT: [
-          {
-            target: "loading",
-            cond: (ctx, event) => event.data.email !== "" && event.data.password !== "",
-            actions: assign({
-              debbugVariables: (ctx, event) => event.data
-            })
-          },
-          {
-            target: "error",
-            actions: assign({
-              msg: (ctx, event) => "User and password can not be empty!"
-            })
-          }
-        ]
-      }
-    },
-    loading: {
-      entry: (ctx, event) => saveContext("loading", ctx.debbugVariables),
-      invoke: {
-        id: "login",
-        src: (ctx, event) => userLogin({ ...event.data }),
-        onDone: {
-          target: "logged",
-          actions: assign({
-            msg: (ctx, event) => event.data
-          })
-        },
-        onError: {
-          target: "error",
-          actions: assign({
-            msg: (ctx, event) => event.data
-          })
-        }
-      }
-    },
-    error: {
-      entry: (ctx, event) => saveContext("error", ctx.debbugVariables),
-      on: {
-        SUBMIT: {
-          target: "loading",
-          cond: (ctx, event) => {
-            return event.data.email !== "" && event.data.password !== "";
-          },
-          actions: assign({
-            msg: (ctx, event) => event.data,
-            debbugVariables: (ctx, event) => event.data
-          })
-        }
-      }
-    },
-    logged: {
-      entry: (ctx, event) => saveContext("logged", ctx.debbugVariables),
-      type: "final"
-    }
-  }
-});
 
 const Form = props => {
   const [form, updateForm] = useState({
@@ -143,7 +62,7 @@ const Form = props => {
 const ErrorMessage = props => {
   return (
     <div className="alert error">
-      {props.machine.context.msg ? props.machine.context.msg : "Oh no! No error message."}
+      {props.state.context.msg ? props.state.context.msg : "Oh no! No error message."}
     </div>
   );
 };
@@ -157,7 +76,7 @@ const MicroFlowState = props => {
       <input
         type="checkbox"
         onChange={e => props.onClick(e, props.name)}
-        defaultChecked={statesChecked.find(name => name === props.name)}
+        defaultChecked={props.statesChecked.find(name => name === props.name)}
       />
     </div>
   );
@@ -166,17 +85,26 @@ const MicroFlowState = props => {
 const MicroFlow = props => {
   const setCheckPoint = (e, stateName) => {
     if (e.target.checked) {
-      statesChecked.push(stateName);
+      props.setStatesChecked(props.statesChecked.concat(stateName));
+      console.log(props.statesChecked.concat(stateName));
     } else {
-      statesChecked = statesChecked.filter(checkPoints => {
-        return checkPoints !== stateName;
-      });
+      props.setStatesChecked(
+        props.statesChecked.filter(checkPoints => {
+          return checkPoints !== stateName;
+        })
+      );
     }
   };
 
-  const states = Object.keys(stateMachine.states).map(state => {
+  const states = Object.keys(props.machine.states).map(state => {
     return (
-      <MicroFlowState name={state} key={state} machine={props.machine} onClick={setCheckPoint} />
+      <MicroFlowState
+        key={state}
+        name={state}
+        machine={props.state}
+        onClick={setCheckPoint}
+        statesChecked={props.statesChecked}
+      />
     );
   });
 
@@ -186,7 +114,7 @@ const MicroFlow = props => {
 const StateHistory = props => {
   return (
     <div style={{ marginRight: "100px" }}>
-      {stateHistory.map((log, index) => (
+      {props.stateHistory.map((log, index) => (
         <div key={index}>{JSON.stringify(log)}</div>
       ))}
     </div>
@@ -194,16 +122,96 @@ const StateHistory = props => {
 };
 
 const App = () => {
-  const [machine, send] = useMachine(stateMachine);
+  const stateMachine = Machine({
+    initial: "initial",
+    context: {
+      msg: "",
+      debbugVariables: {
+        email: "",
+        password: ""
+      }
+    },
+    states: {
+      initial: {
+        on: {
+          SUBMIT: [
+            {
+              target: "loading",
+              cond: (ctx, event) => event.data.email !== "" && event.data.password !== "",
+              actions: assign({
+                debbugVariables: (ctx, event) => event.data
+              })
+            },
+            {
+              target: "error",
+              actions: assign({
+                msg: (ctx, event) => "User and password can not be empty!"
+              })
+            }
+          ]
+        }
+      },
+      loading: {
+        invoke: {
+          id: "login",
+          src: (ctx, event) => userLogin({ ...event.data }),
+          onDone: {
+            target: "logged",
+            actions: assign({
+              msg: (ctx, event) => event.data
+            })
+          },
+          onError: {
+            target: "error",
+            actions: assign({
+              msg: (ctx, event) => event.data
+            })
+          }
+        }
+      },
+      error: {
+        on: {
+          SUBMIT: {
+            target: "loading",
+            cond: (ctx, event) => {
+              return event.data.email !== "" && event.data.password !== "";
+            },
+            actions: assign({
+              msg: (ctx, event) => event.data,
+              debbugVariables: (ctx, event) => event.data
+            })
+          }
+        }
+      },
+      logged: {
+        type: "final"
+      }
+    }
+  });
+
+  const [state, send] = useMachine(stateMachine);
+  const [stateHistory, setStateHistory] = useState([]);
+  const [statesChecked, setStatesChecked] = useState(["initial"]);
+
+  useEffect(() => {
+    if (statesChecked.find(checkPoints => checkPoints === state.value)) {
+      setStateHistory(
+        stateHistory.concat({ state: state.value, ...state.context.debbugVariables })
+      );
+    }
+  }, [state]);
 
   return (
     <div style={{ margin: "130px auto", width: "800px" }}>
-      <MicroFlow machine={machine} />
-      {machine.matches("error") || machine.matches("logged") ? (
-        <ErrorMessage machine={machine} />
-      ) : null}
-      {!machine.matches("logged") ? <Form send={send} /> : null}
-      <StateHistory />
+      <MicroFlow
+        machine={stateMachine}
+        state={state}
+        statesChecked={statesChecked}
+        setStatesChecked={setStatesChecked}
+      />
+      {state.matches("error") || state.matches("logged") ? <ErrorMessage state={state} /> : null}
+      {!state.matches("logged") ? <Form send={send} /> : null}
+      <StateHistory stateHistory={stateHistory} />
     </div>
   );
 };
